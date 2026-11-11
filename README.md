@@ -1,24 +1,22 @@
 # ZeroTrust Health Exchange
 
-A secure platform for sharing patient health records between doctors, laboratories and patients — built on the
+A secure platform for sharing patient health records between doctors, laboratories and patients, built on the
 **zero-trust** principle: *never trust, always verify*. Every user is authenticated with a password **and** a
 one-time code, every request is checked against a permission table, records are encrypted and digitally signed, and
 every action is written to a tamper-evident activity log.
 
-> Course project for **Cryptography and Network Security (26ECSC403)** — Team 7.
-
 ---
 
 ## Table of contents
-1. [What it does](#what-it-does)
-2. [Roles and what each can do](#roles-and-what-each-can-do)
-3. [Cryptography used](#cryptography-used)
+1. [Features](#features)
+2. [Roles and permissions](#roles-and-permissions)
+3. [Cryptography](#cryptography)
 4. [Tech stack](#tech-stack)
 5. [Project structure](#project-structure)
-6. [Setup and run](#setup-and-run)
-7. [Accounts and Google Authenticator](#accounts-and-google-authenticator)
+6. [Getting started](#getting-started)
+7. [Sample accounts and authenticator setup](#sample-accounts-and-authenticator-setup)
 8. [Live verification-code board](#live-verification-code-board)
-9. [Demo walkthrough](#demo-walkthrough)
+9. [Example walkthrough](#example-walkthrough)
 10. [Testing](#testing)
 11. [Resetting data](#resetting-data)
 12. [Security design notes and limitations](#security-design-notes-and-limitations)
@@ -26,28 +24,28 @@ every action is written to a tamper-evident activity log.
 
 ---
 
-## What it does
-- **Sign in securely** with a password plus a 6-digit code from an authenticator app (two-step verification).
-- **Upload patient records** (a file up to 2 MB, or a written note). Each record is encrypted and digitally signed.
-- **Share records between clinicians.** When a clinician shares a record, the **patient must approve** before the
-  recipient can open it. The patient can remove anyone's access at any time.
-- **Open a record** and see whether it is verified (unchanged since upload). A tampered record is refused.
-- **Role-based permissions** that an administrator can edit from a permissions grid.
-- **Administrator tools:** manage users (deactivate, reactivate, unlock, permanently delete), edit permissions, and
-  read the activity log, with a one-click integrity check that detects edited or deleted entries.
-- **Account protection:** lockout after 5 failed sign-ins, request rate limiting, short-lived sessions that are revoked on sign-out.
+## Features
+- **Two-step sign-in:** password plus a 6-digit code from an authenticator app (TOTP).
+- **Encrypted patient records:** upload a file (up to 2 MB) or a written note. Each record is encrypted and digitally signed.
+- **Consent-based sharing:** a clinician can share a record with another clinician, but the **patient must approve**
+  before the recipient can open it. The patient can remove anyone's access at any time.
+- **Verified viewing:** when a record is opened, the system confirms it is unchanged since upload. A tampered record is refused.
+- **Role-based permissions:** an editable permission grid controls what each role may do.
+- **Administration:** manage users (deactivate, reactivate, unlock, permanently delete), edit permissions, and read the
+  activity log with a one-click integrity check that detects edited or removed entries.
+- **Account protection:** lockout after 5 failed sign-ins, request rate limiting, and short-lived sessions that are revoked on sign-out.
 
-## Roles and what each can do
+## Roles and permissions
 
 | Role | Can | Cannot |
 |---|---|---|
-| **Doctor** | Upload records for patients, view records they were given access to, share with other clinicians (patient approves) | Manage users or permissions, read the activity log |
-| **Lab staff** | Same as a doctor — typically uploads test results | Same limits as a doctor |
+| **Doctor** | Upload records for patients, view records shared with them, share with other clinicians (patient approves) | Manage users or permissions, read the activity log |
+| **Lab staff** | Same as a doctor; typically uploads test results | Same limits as a doctor |
 | **Patient** | View own records, approve or decline access requests, remove anyone's access | Upload or share records |
-| **Administrator** | Manage users, edit the permissions grid, read and verify the activity log | Open any patient record (deliberately not permitted) |
+| **Administrator** | Manage users, edit the permission grid, read and verify the activity log | Open patient records (deliberately not permitted) |
 
-Permissions are stored in a table (role × permission). The administrator can change them on the **Permissions** page and
-the change applies to the very next request. Defaults:
+Permissions are stored as a role × permission table. An administrator can change them on the **Permissions** page, and a
+change applies to the very next request. Defaults:
 
 | Permission | Doctor | Lab | Patient | Admin |
 |---|:-:|:-:|:-:|:-:|
@@ -59,25 +57,25 @@ the change applies to the very next request. Defaults:
 | View activity log | | | | ✔ |
 | View / edit permissions | | | | ✔ |
 
-## Cryptography used
+## Cryptography
 
-| Algorithm | Where it is used |
+| Algorithm | Purpose |
 |---|---|
-| **AES-256-GCM** | Encrypts every record. Fresh random key and nonce per record; the record id is bound in as authenticated data. |
-| **RSA-2048 (OAEP, SHA-256)** | Wraps each record's AES key separately for every person allowed to open it. Sharing = re-wrapping the key for the recipient; revoking = destroying that person's wrapped key. |
-| **RSA-PSS digital signature** | The uploader signs each record. Verified every time the record is opened. |
+| **AES-256-GCM** | Encrypts every record. A fresh random key and nonce are used per record, and the record id is bound in as authenticated data. |
+| **RSA-2048 (OAEP, SHA-256)** | Wraps each record's AES key separately for every person allowed to open it. Sharing re-wraps the key for the recipient; removing access destroys that person's wrapped key. |
+| **RSA-PSS digital signature** | The uploader signs each record. The signature is verified every time the record is opened. |
 | **SHA-256** | Record fingerprint (integrity check) and the hash chain of the activity log. |
-| **Argon2id** | Password hashing (salted). |
-| **TLS / HTTPS** | The backend is served over TLS (self-signed certificate generated on first run). |
+| **Argon2id** | Salted password hashing. |
+| **TLS / HTTPS** | The backend is served over TLS using a self-signed certificate generated on first run. |
 
-Also: **JWT** sessions (HMAC-SHA256, 15 minutes, revocable on sign-out), **TOTP** two-step verification (RFC 6238),
-and **RBAC with an Access Control Matrix** enforced on every API request.
+Also used: **JWT** sessions (HMAC-SHA256, 15 minutes, revocable on sign-out), **TOTP** two-step verification (RFC 6238),
+and **role-based access control with an Access Control Matrix** enforced on every API request.
 
 ## Tech stack
 - **Frontend:** React 18 + Vite (plain CSS, no UI framework)
 - **Backend:** Python, FastAPI, SQLAlchemy
-- **Database:** SQLite (a single file; no database server needed)
-- **Crypto libraries:** `cryptography`, `argon2-cffi`, `PyJWT`, `pyotp`
+- **Database:** SQLite (a single file; no database server required)
+- **Libraries:** `cryptography`, `argon2-cffi`, `PyJWT`, `pyotp`
 
 ## Project structure
 ```
@@ -87,24 +85,25 @@ zerotrust-health-exchange/
 │   │   ├── main.py        API routes (auth, records, sharing, consent, admin, stats)
 │   │   ├── crypto.py      AES-GCM, RSA-OAEP, RSA-PSS, SHA-256, Argon2id
 │   │   ├── security.py    JWT, permission checks (Access Control Matrix), rate limiting
-│   │   ├── audit.py       Hash-chained activity log + integrity check
+│   │   ├── audit.py       Hash-chained activity log and integrity check
 │   │   ├── models.py      Database tables
 │   │   ├── config.py      Settings; generates secrets on first run
 │   │   └── db.py
-│   ├── run.py             Starts the backend over HTTPS (creates certificate, seeds accounts)
-│   ├── seed.py            Creates the 5 starting accounts and the authenticator setup page
+│   ├── run.py             Starts the backend over HTTPS (creates the certificate, seeds sample accounts)
+│   ├── seed.py            Creates the sample accounts and the authenticator setup page
 │   ├── codes.py           Live board of verification codes (see below)
 │   ├── e2e_test.py        End-to-end test suite
 │   ├── requirements.txt
-│   └── instance/          Generated at first run — secrets, keys, database (NOT in git)
+│   └── instance/          Generated at first run: secrets, keys, database (excluded from version control)
 ├── frontend/              React app (src/ holds the pages)
-├── start_backend.bat      Start backend, keep data
-├── start_frontend.bat     Start frontend
-└── reset_and_start.bat    Wipe all data, then start backend
+├── start_backend.bat      Start the backend, keeping existing data
+├── start_frontend.bat     Start the frontend
+└── reset_and_start.bat    Delete all data, then start the backend
 ```
 
-## Setup and run
-Requires **Python 3.11+** and **Node.js 18+** (Windows; the `.bat` files are Windows conveniences).
+## Getting started
+**Requirements:** Python 3.11+ and Node.js 18+. The `.bat` files are Windows conveniences; on other systems run the
+equivalent commands shown below.
 
 **1. Backend** (first time)
 ```bash
@@ -113,9 +112,10 @@ python -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
 .venv\Scripts\python.exe run.py
 ```
-It starts at `https://127.0.0.1:8443`. On first run it creates, inside `backend/instance/`:
-a JWT secret, the master key that protects stored private keys, a TLS certificate, the SQLite database, the 5 starting
-accounts, and a private page for setting up your authenticator app. None of these are committed to git.
+The backend listens on `https://127.0.0.1:8443`. On first run it generates, inside `backend/instance/`: a JWT secret,
+the master key that protects stored private keys, a TLS certificate, the SQLite database, the sample accounts, and a
+local page for adding the accounts to an authenticator app. These generated files are listed in `.gitignore` and are
+never part of the repository.
 
 **2. Frontend** (second terminal)
 ```bash
@@ -125,58 +125,63 @@ npm run dev
 ```
 Open **http://localhost:5173**.
 
-Next time, just double-click `start_backend.bat` and `start_frontend.bat`.
+On later runs, use `start_backend.bat` and `start_frontend.bat`.
 
-## Accounts and Google Authenticator
-The first run creates these five accounts (all fictional):
+## Sample accounts and authenticator setup
+The first run creates five fictional accounts:
 
 | Role | Name | Username | Password |
 |---|---|---|---|
 | Administrator | System Administrator | `admin` | `Admin@123456` |
-| Doctor | Dr. Anita Rao — City General Hospital | `dr.rao` | `Rao@123456` |
-| Doctor | Dr. Vikram Mehta — Metro Heart Institute | `dr.mehta` | `Mehta@123456` |
-| Lab staff | Prakash Shetty — City General Hospital Lab | `prakash.s` | `Prakash@123456` |
+| Doctor | Dr. Anita Rao, City General Hospital | `dr.rao` | `Rao@123456` |
+| Doctor | Dr. Vikram Mehta, Metro Heart Institute | `dr.mehta` | `Mehta@123456` |
+| Lab staff | Prakash Shetty, City General Hospital Lab | `prakash.s` | `Prakash@123456` |
 | Patient | Ramesh Hiremath | `ramesh.h` | `Ramesh@123456` |
 
-These are demonstration passwords for a coursework project. **Never reuse them for anything real.**
+These sample credentials are intended for local evaluation only and should be changed or removed before the
+application is used in any other setting.
 
-Signing in also needs a 6-digit code. Add the accounts to **Google Authenticator** (or any authenticator app):
+Signing in also requires a 6-digit code. To add the accounts to **Google Authenticator** (or any TOTP app):
 
-1. After the first run, open **`backend/instance/accounts_and_authenticator.html`** in a browser. It shows a QR code per account.
-2. In the app tap **+ → Scan a QR code** and scan each one. Each account appears as *Role: Name* (for example *Doctor: Dr. Anita Rao*).
-   - Can't scan? Tap **+ → Enter a setup key**, type the role and name, paste the key shown under the QR code and choose **Time based**.
-3. Sign in with username + password, then type the 6-digit code shown for that account.
+1. Open **`backend/instance/accounts_and_authenticator.html`** in a browser. It is generated on startup and shows a QR code for each account.
+2. In the authenticator app, choose **+ → Scan a QR code** and scan each one. Accounts appear as *Role: Name*
+   (for example *Doctor: Dr. Anita Rao*).
+   - If scanning is not possible, choose **+ → Enter a setup key**, type the role and name, paste the key printed under the QR code, and select **Time based**.
+3. Sign in with the username and password, then enter the 6-digit code shown for that account.
 
-Authenticator keys are random per installation and are kept in `backend/instance/`, so they survive a database reset.
-New users who register in the app are shown their own QR code and key during sign-up.
+Authenticator keys are random for each installation and are stored in `backend/instance/`, so they remain valid after
+a database reset. Users who register through the app are shown their own QR code and key during sign-up.
 
 ## Live verification-code board
-For presentations you can show the live code for every user — including users who register later:
+`codes.py` is a helper for local development and demonstrations. It prints the current verification code for every
+registered user and refreshes every second:
 
 ```bash
 cd backend
 .venv\Scripts\python.exe codes.py
 ```
 
-It reads the user list from the backend database and generates the same time-based codes that the authenticator app
-shows, refreshing every second with a countdown. New users appear within a second; deleted users disappear.
-Press **Ctrl+C** to stop. Keep the window at least 14 lines tall.
+It reads the user list from the backend database and computes the same time-based codes that an authenticator app
+shows, with a countdown to the next code. Users appear within a second of registering and disappear when deleted.
+Press **Ctrl+C** to exit. The terminal window should be at least 14 lines tall.
 
-> This is a presentation aid only. It displays everyone's second-factor codes, which a real deployment must never do.
+> The board exposes every user's second-factor code. It is meant for local use only and must not be deployed.
 
-## Demo walkthrough
-1. **Doctor uploads.** Sign in as `dr.rao` → **Records → Upload record** → title *Complete blood count*, patient *Ramesh Hiremath*,
-   write a note → **Upload**. Open the record → **View document**: a green *Verified* line appears.
-2. **Doctor shares.** On the record click **Share**, choose *Dr. Vikram Mehta*. It shows *Request sent to patient*. Sign out.
-3. **Other doctor is blocked.** Sign in as `dr.mehta`: the record is marked *Pending* and cannot be opened.
-4. **Patient approves.** Sign in as `ramesh.h` → **Requests** (badge shows the count) → **Approve**.
-5. **Access works.** Sign in as `dr.mehta` again → open the record → it displays.
-6. **Patient removes access.** As `ramesh.h` open the record → **People with access → Remove**. `dr.mehta` can no longer see it.
-7. **Lab staff.** As `prakash.s` the *Records* list is empty until a record is shared; opening someone else's record is refused and logged.
+## Example walkthrough
+1. **Doctor uploads.** Sign in as `dr.rao`, open **Records → Upload record**, enter a title (for example *Complete blood count*),
+   choose the patient *Ramesh Hiremath*, add a note, and select **Upload**. Open the record and choose **View document**;
+   a green *Verified* line confirms it is unchanged.
+2. **Doctor shares.** On the record, select **Share** and choose *Dr. Vikram Mehta*. The request is sent to the patient.
+3. **Recipient is blocked until approval.** As `dr.mehta`, the record is marked *Pending* and cannot be opened.
+4. **Patient approves.** As `ramesh.h`, open **Requests** and select **Approve**.
+5. **Access works.** As `dr.mehta`, the record can now be opened.
+6. **Patient removes access.** As `ramesh.h`, open the record and use **Remove** under *People with access*.
+   `dr.mehta` can no longer see it.
+7. **Unauthorised access is refused.** As `prakash.s`, a record that has not been shared cannot be opened, and the attempt is logged.
 8. **Administrator.** As `admin`:
-   - **Activity log** — every action in plain language; **Check log integrity** confirms nothing was altered.
-   - **Permissions** — click a cell (for example, give Lab staff *Share records*) and see the effect on the next sign-in.
-   - **Users** — deactivate, unlock or **permanently delete** a user (the dialog shows exactly which records go with them).
+   - **Activity log:** every action in plain language; **Check log integrity** confirms no entry was altered.
+   - **Permissions:** change what a role may do (for example, give Lab staff *Share records*).
+   - **Users:** deactivate, unlock or permanently delete a user. The confirmation dialog lists the records that will be removed with them.
 
 ## Testing
 With the backend running:
@@ -184,32 +189,32 @@ With the backend running:
 cd backend
 .venv\Scripts\python.exe e2e_test.py
 ```
-Runs **34 checks**: sign-in with password and code, encrypted storage, permission denials, patient consent, revocation,
-a tampered record being refused, an edited activity-log entry being detected, lockout, and user deletion.
-The test deliberately edits an activity-log entry, so afterwards run `reset_and_start.bat` to restore a clean database.
+The suite runs **34 checks**: sign-in with password and code, encrypted storage, permission denials, patient consent,
+removal of access, a tampered record being refused, an edited activity-log entry being detected, account lockout, and user deletion.
+The test intentionally edits an activity-log entry, so run `reset_and_start.bat` afterwards to restore a clean database.
 
 ## Resetting data
-`reset_and_start.bat` (close any running backend first) deletes the database — all records, activity and any extra users —
-and starts fresh with the 5 starting accounts. Your authenticator entries keep working.
+`reset_and_start.bat` (stop any running backend first) deletes the database, including all records, activity and extra
+users, and starts again with the five sample accounts. Authenticator entries stay valid.
 
 ## Security design notes and limitations
 - Each record has its own AES key. Users' RSA private keys are stored **encrypted under a server master key**
-  (`backend/instance/secrets.json`). A production system would hold that key in a KMS or HSM and unlock private keys with
-  user-held secrets. The master key is never committed.
-- The server performs decryption on the user's behalf after authorising them; this is not end-to-end encryption.
-- Administrators cannot open patient records, but they can read activity metadata (who did what, when).
-- Deleting a user also deletes every record tied to them; their past entries in the activity log are kept by design.
-- The TLS certificate is self-signed, so browsers warn if you open `https://127.0.0.1:8443` directly. The app itself is
-  used through the frontend at `http://localhost:5173`, which proxies to the backend.
-- SQLite and an in-memory rate limiter suit a single-server demo, not horizontal scaling.
-- The starting account passwords are in `backend/seed.py` and this README by design (coursework demo).
+  (`backend/instance/secrets.json`). A production system would keep that key in a KMS or HSM and unlock private keys with
+  user-held secrets.
+- Decryption is performed by the server after the user is authorised; this is not end-to-end encryption.
+- Administrators cannot open patient records, but they can read activity metadata (who did what, and when).
+- Deleting a user also deletes every record tied to them. Their past entries in the activity log are kept by design.
+- The TLS certificate is self-signed, so browsers warn when `https://127.0.0.1:8443` is opened directly. The web app is
+  used through the frontend at `http://localhost:5173`, which proxies requests to the backend.
+- SQLite and the in-memory rate limiter suit a single-server deployment, not horizontal scaling.
+- The sample account passwords are defined in `backend/seed.py` and listed above for evaluation purposes.
 
 ## Troubleshooting
 | Problem | Fix |
 |---|---|
-| Sign-in says *Invalid credentials* | Check the username (for example `dr.rao`, with a dot) and password. |
-| *Invalid verification code* | Codes last 30 s. Check your phone's clock is automatic. Or compare with `codes.py`. |
-| *Account temporarily locked* | 5 wrong attempts. Wait 5 minutes or sign in as `admin` → Users → **Unlock**. |
-| Page loads but nothing works | The backend isn't running. Start `start_backend.bat`. |
-| Port already in use | Another backend is running. Close it, or end the `python` process using port 8443. |
-| Need the authenticator page again | Run the backend once; it is regenerated at `backend/instance/accounts_and_authenticator.html`. |
+| *Invalid credentials* on sign-in | Check the username (for example `dr.rao`, with a dot) and the password. |
+| *Invalid verification code* | Codes last 30 seconds. Make sure the phone's clock is set automatically, or compare with `codes.py`. |
+| *Account temporarily locked* | Five wrong attempts lock an account for 5 minutes. An administrator can unlock it from **Users**. |
+| The page loads but nothing works | The backend is not running. Start it with `start_backend.bat`. |
+| Port already in use | Another instance is running. Stop it, or end the process using port 8443 (backend) or 5173 (frontend). |
+| The authenticator page is missing | Start the backend once; it recreates `backend/instance/accounts_and_authenticator.html`. |
