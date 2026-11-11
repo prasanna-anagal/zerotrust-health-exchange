@@ -19,7 +19,7 @@ every action is written to a tamper-evident activity log.
 9. [Example walkthrough](#example-walkthrough)
 10. [Testing](#testing)
 11. [Resetting data](#resetting-data)
-12. [Security design notes and limitations](#security-design-notes-and-limitations)
+12. [Security notes](#security-notes)
 13. [Troubleshooting](#troubleshooting)
 
 ---
@@ -94,7 +94,7 @@ zerotrust-health-exchange/
 │   ├── codes.py           Live board of verification codes (see below)
 │   ├── e2e_test.py        End-to-end test suite
 │   ├── requirements.txt
-│   └── instance/          Generated at first run: secrets, keys, database (excluded from version control)
+│   └── instance/          Generated at first run: secrets, keys, database
 ├── frontend/              React app (src/ holds the pages)
 ├── start_backend.bat      Start the backend, keeping existing data
 ├── start_frontend.bat     Start the frontend
@@ -114,8 +114,7 @@ python -m venv .venv
 ```
 The backend listens on `https://127.0.0.1:8443`. On first run it generates, inside `backend/instance/`: a JWT secret,
 the master key that protects stored private keys, a TLS certificate, the SQLite database, the sample accounts, and a
-local page for adding the accounts to an authenticator app. These generated files are listed in `.gitignore` and are
-never part of the repository.
+local page for adding the accounts to an authenticator app.
 
 **2. Frontend** (second terminal)
 ```bash
@@ -138,9 +137,6 @@ The first run creates five fictional accounts:
 | Lab staff | Prakash Shetty, City General Hospital Lab | `prakash.s` | `Prakash@123456` |
 | Patient | Ramesh Hiremath | `ramesh.h` | `Ramesh@123456` |
 
-These sample credentials are intended for local evaluation only and should be changed or removed before the
-application is used in any other setting.
-
 Signing in also requires a 6-digit code. To add the accounts to **Google Authenticator** (or any TOTP app):
 
 1. Open **`backend/instance/accounts_and_authenticator.html`** in a browser. It is generated on startup and shows a QR code for each account.
@@ -153,8 +149,7 @@ Authenticator keys are random for each installation and are stored in `backend/i
 a database reset. Users who register through the app are shown their own QR code and key during sign-up.
 
 ## Live verification-code board
-`codes.py` is a helper for local development and demonstrations. It prints the current verification code for every
-registered user and refreshes every second:
+`codes.py` prints the current verification code for every registered user and refreshes every second:
 
 ```bash
 cd backend
@@ -164,8 +159,6 @@ cd backend
 It reads the user list from the backend database and computes the same time-based codes that an authenticator app
 shows, with a countdown to the next code. Users appear within a second of registering and disappear when deleted.
 Press **Ctrl+C** to exit. The terminal window should be at least 14 lines tall.
-
-> The board exposes every user's second-factor code. It is meant for local use only and must not be deployed.
 
 ## Example walkthrough
 1. **Doctor uploads.** Sign in as `dr.rao`, open **Records → Upload record**, enter a title (for example *Complete blood count*),
@@ -197,17 +190,14 @@ The test intentionally edits an activity-log entry, so run `reset_and_start.bat`
 `reset_and_start.bat` (stop any running backend first) deletes the database, including all records, activity and extra
 users, and starts again with the five sample accounts. Authenticator entries stay valid.
 
-## Security design notes and limitations
+## Security notes
 - Each record has its own AES key. Users' RSA private keys are stored **encrypted under a server master key**
-  (`backend/instance/secrets.json`). A production system would keep that key in a KMS or HSM and unlock private keys with
-  user-held secrets.
-- Decryption is performed by the server after the user is authorised; this is not end-to-end encryption.
+  (`backend/instance/secrets.json`).
+- Records are decrypted on the server after the user has been authorised.
 - Administrators cannot open patient records, but they can read activity metadata (who did what, and when).
-- Deleting a user also deletes every record tied to them. Their past entries in the activity log are kept by design.
-- The TLS certificate is self-signed, so browsers warn when `https://127.0.0.1:8443` is opened directly. The web app is
-  used through the frontend at `http://localhost:5173`, which proxies requests to the backend.
-- SQLite and the in-memory rate limiter suit a single-server deployment, not horizontal scaling.
-- The sample account passwords are defined in `backend/seed.py` and listed above for evaluation purposes.
+- Deleting a user also deletes every record tied to them. Their past entries in the activity log are kept.
+- The TLS certificate is self-signed, so browsers show a warning when `https://127.0.0.1:8443` is opened directly. The web
+  app is used through the frontend at `http://localhost:5173`, which proxies requests to the backend.
 
 ## Troubleshooting
 | Problem | Fix |
